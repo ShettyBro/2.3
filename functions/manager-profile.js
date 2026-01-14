@@ -297,20 +297,18 @@ const finalizeManagerProfile = async (pool, auth, body) => {
   }
 
   // Get college_code and user phone
-  const collegeResult = await pool
-    .request()
-    .input('college_id', sql.Int, auth.college_id)
-    .query(`
-      SELECT college_code
-      FROM colleges
-      WHERE college_id = @college_id
-    `);
+ const collegeResult = await pool
+  .request()
+  .input('college_id', sql.Int, auth.college_id)
+  .query(`
+    SELECT college_code, college_name
+    FROM colleges
+    WHERE college_id = @college_id
+  `);
 
+const college_code = collegeResult.recordset[0].college_code;
+const college_name = collegeResult.recordset[0].college_name;
 
-
-  const college_code = collegeResult.recordset[0].college_code;
-  const user_phone = userResult.recordset[0].phone || 'N/A';
-  const user_email = userResult.recordset[0].email;
 
   // Insert manager as accompanist with is_team_manager = 1
   const blobBasePath = `${college_code}/manager-${auth.full_name.replace(/\s+/g, '_')}`;
