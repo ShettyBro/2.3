@@ -312,6 +312,16 @@ const college_name = collegeResult.recordset[0].college_name;
 
   // Insert manager as accompanist with is_team_manager = 1
   const blobBasePath = `${college_code}/manager-${auth.full_name.replace(/\s+/g, '_')}`;
+      const passportPhotoUrl =
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/passport_photo`;
+
+  const aadhaarUrl =
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/aadhaar_card`;
+
+  const collegeIdCardUrl =
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/college_id_card`;
+
+
 
   await pool
     .request()
