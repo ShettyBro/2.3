@@ -26,54 +26,68 @@ const headers = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-const verifyAuth = (event) => {
- try {
-      const authHeader = event.headers.authorization || event.headers.Authorization;
-         
-         if (!authHeader || !authHeader.startsWith("Bearer ")) {
-           return {
-             statusCode: 401,
-             headers,
-             body: JSON.stringify({
-               success: false,
-               message: "Token expired. Redirecting to login...",
-               redirect: "https://vtufest2026.acharyahabba.com/",
-             }),
-           };
-         }
-     
-         const token = authHeader.substring(7);
-         let decoded;
-     
-         try {
-           decoded = jwt.verify(token, JWT_SECRET);
-         } catch (err) {
-           return {
-             statusCode: 401,
-             headers,
-             body: JSON.stringify({
-               success: false,
-               message: "Token expired. Redirecting to login...",
-               redirect: "https://vtufest2026.acharyahabba.com/",
-             }),
-           };
-         }
-       const role = decoded.role;
- 
- 
-     if (decoded.role !== 'PRINCIPAL' && decoded.role !== 'MANAGER') {
-       throw new Error('Unauthorized: Principal or Manager role required');
-     }
-     const auth = {
-       user_id: decoded.user_id,
-       college_id: decoded.college_id,
-       role: decoded.role,
-     };
-      return auth;
-    } catch (error) {
-      throw error;
-    }
+const verifyAuth = async (event, pool) => {
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return {
+      statusCode: 401,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        message: "Token expired. Redirecting to login...",
+        redirect: "https://vtufest2026.acharyahabba.com/",
+      }),
+    };
+  }
+
+  const token = authHeader.substring(7);
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return {
+      statusCode: 401,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        message: "Token expired. Redirecting to login...",
+        redirect: "https://vtufest2026.acharyahabba.com/",
+      }),
+    };
+  }
+
+  if (decoded.role !== "PRINCIPAL" && decoded.role !== "MANAGER") {
+    throw new Error("Unauthorized role");
+  }
+
+  // 🔥 Load identity from DB (single source of truth)
+  const userResult = await pool
+    .request()
+    .input("user_id", sql.Int, decoded.user_id)
+    .query(`
+      SELECT user_id, college_id, full_name, phone, email, role
+      FROM users
+      WHERE user_id = @user_id AND is_active = 1
+    `);
+
+  if (userResult.recordset.length === 0) {
+    throw new Error("User not found or inactive");
+  }
+
+  const user = userResult.recordset[0];
+
+  return {
+    user_id: user.user_id,
+    college_id: user.college_id,
+    full_name: user.full_name,
+    phone: user.phone,
+    email: user.email,
+    role: user.role,
+  };
 };
+
 
 const generateSASUrl = (blobPath) => {
   const sharedKeyCredential = new StorageSharedKeyCredential(
