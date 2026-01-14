@@ -169,16 +169,16 @@ const initManagerProfile = async (pool, auth) => {
   }
 
   // Get college_code
- const collegeResult = await pool
-  .request()
-  .input('college_id', sql.Int, auth.college_id)
-  .query(`
+  const collegeResult = await pool
+    .request()
+    .input('college_id', sql.Int, auth.college_id)
+    .query(`
     SELECT college_code, college_name
     FROM colleges
     WHERE college_id = @college_id
   `);
 
-  
+
   const college_name = collegeResult.recordset[0].college_name;
 
   if (collegeResult.recordset.length === 0) {
@@ -188,6 +188,19 @@ const initManagerProfile = async (pool, auth) => {
       body: JSON.stringify({ error: 'College not found' }),
     };
   }
+
+  const userResult = await pool
+    .request()
+    .input('user_id', sql.Int, auth.user_id)
+    .query(`
+    SELECT phone, email
+    FROM users
+    WHERE user_id = @user_id
+  `);
+
+  const user_phone = userResult.recordset[0].phone || 'N/A';
+  const user_email = userResult.recordset[0].email;
+
 
   const college_code = collegeResult.recordset[0].college_code;
 
@@ -218,13 +231,13 @@ const initManagerProfile = async (pool, auth) => {
   };
 
   const passportPhotoUrl =
-  `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/passport_photo`;
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/passport_photo`;
 
-const aadhaarUrl =
-  `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/aadhaar_card`;
+  const aadhaarUrl =
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/aadhaar_card`;
 
-const collegeIdCardUrl =
-  `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/college_id_card`;
+  const collegeIdCardUrl =
+    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/college_id_card`;
 
 
 
@@ -301,21 +314,21 @@ const finalizeManagerProfile = async (pool, auth, body) => {
 
   // Insert manager as accompanist with is_team_manager = 1
   const blobBasePath = `${college_code}/manager-${auth.full_name.replace(/\s+/g, '_')}`;
-  
-await pool
-  .request()
-  .input('college_id', sql.Int, auth.college_id)
-  .input('college_name', sql.VarChar(255), college_name)
-  .input('full_name', sql.VarChar(255), auth.full_name)
-  .input('phone', sql.VarChar(20), auth.phone)
-  .input('email', sql.VarChar(255), auth.email)
-  .input('accompanist_type', sql.VarChar(20), 'faculty')
-  .input('passport_photo_url', sql.VarChar(500), passportPhotoUrl)
-  .input('id_proof_url', sql.VarChar(500), aadhaarUrl)
-  .input('college_id_card_url', sql.VarChar(500), collegeIdCardUrl)
-  .input('is_team_manager', sql.Bit, 1)
-  .input('created_by_user_id', sql.Int, auth.user_id)
-  .query(`
+
+  await pool
+    .request()
+    .input('college_id', sql.Int, auth.college_id)
+    .input('college_name', sql.VarChar(255), college_name)
+    .input('full_name', sql.VarChar(255), auth.full_name)
+    .input('phone', sql.VarChar(20), auth.phone)
+    .input('email', sql.VarChar(255), auth.email)
+    .input('accompanist_type', sql.VarChar(20), 'faculty')
+    .input('passport_photo_url', sql.VarChar(500), passportPhotoUrl)
+    .input('id_proof_url', sql.VarChar(500), aadhaarUrl)
+    .input('college_id_card_url', sql.VarChar(500), collegeIdCardUrl)
+    .input('is_team_manager', sql.Bit, 1)
+    .input('created_by_user_id', sql.Int, auth.user_id)
+    .query(`
     INSERT INTO accompanists (
       college_id,
       college_name,
