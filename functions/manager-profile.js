@@ -189,17 +189,7 @@ const initManagerProfile = async (pool, auth) => {
     };
   }
 
-  const userResult = await pool
-    .request()
-    .input('user_id', sql.Int, auth.user_id)
-    .query(`
-    SELECT phone, email
-    FROM users
-    WHERE user_id = @user_id
-  `);
 
-  const user_phone = userResult.recordset[0].phone || 'N/A';
-  const user_email = userResult.recordset[0].email;
 
 
   const college_code = collegeResult.recordset[0].college_code;
@@ -230,14 +220,6 @@ const initManagerProfile = async (pool, auth) => {
     aadhaar_card: generateSASUrl(`${blobBasePath}/aadhaar_card`),
   };
 
-  const passportPhotoUrl =
-    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/passport_photo`;
-
-  const aadhaarUrl =
-    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/aadhaar_card`;
-
-  const collegeIdCardUrl =
-    `https://${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${CONTAINER_NAME}/${blobBasePath}/college_id_card`;
 
 
 
