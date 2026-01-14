@@ -365,8 +365,8 @@ exports.handler = async (event) => {
 
   let pool;
   try {
-    const auth = verifyAuth(event);
     pool = await sql.connect(dbConfig);
+    const auth = await verifyAuth(event, pool);
 
     if (action === 'check_profile_status') {
       return await checkProfileStatus(pool, auth);
