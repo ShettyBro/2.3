@@ -35,7 +35,7 @@ const verifyAuth = (event) => {
   const token = authHeader.substring(7);
   const decoded = jwt.verify(token, JWT_SECRET);
 
-  if (decoded.role !== 'PRINCIPAL') {
+  if (decoded.role !== 'principal') {
     throw new Error('Unauthorized: Principal role required');
   }
 
