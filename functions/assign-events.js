@@ -41,14 +41,14 @@ const EVENT_TABLES = {
   'rangoli': 'event_rangoli',
   'spot_photography': 'event_spot_photography',
   'classical_vocal_solo': 'event_classical_vocal_solo',
-  'classical_instrumental_percussion': 'event_classical_instrumental_percussion',
-  'classical_instrumental_non_percussion': 'event_classical_instrumental_non_percussion',
+  'classical_instrumental_percussion': 'event_classical_instr_percussion',
+  'classical_instrumental_non_percussion': 'event_classical_instr_non_percussion',
   'light_vocal_solo': 'event_light_vocal_solo',
   'western_vocal_solo': 'event_western_vocal_solo',
   'group_song_indian': 'event_group_song_indian',
   'group_song_western': 'event_group_song_western',
   'folk_orchestra': 'event_folk_orchestra',
-  'folk_tribal_dance': 'event_folk_tribal_dance',
+  'folk_tribal_dance': 'event_folk_dance',
   'classical_dance_solo': 'event_classical_dance_solo',
 };
 
@@ -138,39 +138,59 @@ const fetchEventAssignments = async (pool, auth, body) => {
 
   const tableName = EVENT_TABLES[event_slug];
 
-  // Fetch participants
+  // Fetch participants (students in participant role)
   const participantsResult = await pool
     .request()
     .input('college_id', sql.Int, auth.college_id)
     .query(`
       SELECT 
-        et.person_id,
+        CASE 
+          WHEN et.person_type = 'student' THEN et.student_id
+          ELSE et.accompanist_id
+        END AS person_id,
         et.person_type,
         et.full_name,
-        et.phone,
-        et.email,
-        et.event_type
+        CASE 
+          WHEN et.person_type = 'student' THEN s.phone
+          ELSE a.phone
+        END AS phone,
+        CASE 
+          WHEN et.person_type = 'student' THEN s.email
+          ELSE a.email
+        END AS email
       FROM ${tableName} et
+      LEFT JOIN students s ON et.person_type = 'student' AND et.student_id = s.student_id
+      LEFT JOIN accompanists a ON et.person_type = 'accompanist' AND et.accompanist_id = a.accompanist_id
       WHERE et.college_id = @college_id
-        AND et.event_type = 'participating'
+        AND et.role = 'participant'
       ORDER BY et.full_name
     `);
 
-  // Fetch accompanists
+  // Fetch accompanists (anyone in accompanist role)
   const accompanistsResult = await pool
     .request()
     .input('college_id', sql.Int, auth.college_id)
     .query(`
       SELECT 
-        et.person_id,
+        CASE 
+          WHEN et.person_type = 'student' THEN et.student_id
+          ELSE et.accompanist_id
+        END AS person_id,
         et.person_type,
         et.full_name,
-        et.phone,
-        et.email,
-        et.event_type
+        CASE 
+          WHEN et.person_type = 'student' THEN s.phone
+          ELSE a.phone
+        END AS phone,
+        CASE 
+          WHEN et.person_type = 'student' THEN s.email
+          ELSE a.email
+        END AS email
       FROM ${tableName} et
+      LEFT JOIN students s ON et.person_type = 'student' AND et.student_id = s.student_id
+      LEFT JOIN accompanists a ON et.person_type = 'accompanist' AND et.accompanist_id = a.accompanist_id
       WHERE et.college_id = @college_id
-        AND et.event_type = 'accompanying'
+        AND et.role = 'accompanist'
       ORDER BY et.full_name
     `);
 
@@ -190,10 +210,11 @@ const fetchEventAssignments = async (pool, auth, body) => {
       WHERE s.college_id = @college_id
         AND sa.status = 'APPROVED'
         AND sa.student_id NOT IN (
-          SELECT person_id 
+          SELECT student_id 
           FROM ${tableName} 
           WHERE college_id = @college_id 
             AND person_type = 'student'
+            AND student_id IS NOT NULL
         )
       ORDER BY s.full_name
     `);
@@ -212,10 +233,11 @@ const fetchEventAssignments = async (pool, auth, body) => {
       FROM accompanists
       WHERE college_id = @college_id
         AND accompanist_id NOT IN (
-          SELECT person_id 
+          SELECT accompanist_id 
           FROM ${tableName} 
           WHERE college_id = @college_id 
             AND person_type = 'accompanist'
+            AND accompanist_id IS NOT NULL
         )
       ORDER BY full_name
     `);
@@ -320,14 +342,27 @@ const addEventAssignment = async (pool, auth, body) => {
   await transaction.begin();
 
   try {
+    // Get college name
+    const collegeResult = await transaction
+      .request()
+      .input('college_id', sql.Int, auth.college_id)
+      .query(`
+        SELECT college_name
+        FROM colleges
+        WHERE college_id = @college_id
+      `);
+
+    const collegeName = collegeResult.recordset[0].college_name;
+
     // Check if person exists and is approved (for students)
+    let personDetails;
     if (person_type === 'student') {
       const studentCheck = await transaction
         .request()
         .input('student_id', sql.Int, person_id)
         .input('college_id', sql.Int, auth.college_id)
         .query(`
-          SELECT sa.status
+          SELECT sa.status, s.full_name, s.usn
           FROM student_applications sa
           INNER JOIN students s ON sa.student_id = s.student_id
           WHERE sa.student_id = @student_id
@@ -351,6 +386,8 @@ const addEventAssignment = async (pool, auth, body) => {
           body: JSON.stringify({ error: 'Only approved students can be assigned to events' }),
         };
       }
+
+      personDetails = studentCheck.recordset[0];
     } else {
       // Check if accompanist exists
       const accompCheck = await transaction
@@ -358,7 +395,7 @@ const addEventAssignment = async (pool, auth, body) => {
         .input('accompanist_id', sql.Int, person_id)
         .input('college_id', sql.Int, auth.college_id)
         .query(`
-          SELECT accompanist_id
+          SELECT full_name
           FROM accompanists
           WHERE accompanist_id = @accompanist_id
             AND college_id = @college_id
@@ -372,9 +409,12 @@ const addEventAssignment = async (pool, auth, body) => {
           body: JSON.stringify({ error: 'Accompanist not found or does not belong to your college' }),
         };
       }
+
+      personDetails = accompCheck.recordset[0];
     }
 
     // Check for duplicate assignment
+    const idColumn = person_type === 'student' ? 'student_id' : 'accompanist_id';
     const duplicateCheck = await transaction
       .request()
       .input('person_id', sql.Int, person_id)
@@ -383,7 +423,7 @@ const addEventAssignment = async (pool, auth, body) => {
       .query(`
         SELECT COUNT(*) AS count
         FROM ${tableName}
-        WHERE person_id = @person_id
+        WHERE ${idColumn} = @person_id
           AND person_type = @person_type
           AND college_id = @college_id
       `);
@@ -397,53 +437,36 @@ const addEventAssignment = async (pool, auth, body) => {
       };
     }
 
-    // Get person details
-    let personDetails;
-    if (person_type === 'student') {
-      const studentDetails = await transaction
-        .request()
-        .input('student_id', sql.Int, person_id)
-        .query(`
-          SELECT full_name, phone, email, passport_photo_url
-          FROM students
-          WHERE student_id = @student_id
-        `);
-      personDetails = studentDetails.recordset[0];
-    } else {
-      const accompDetails = await transaction
-        .request()
-        .input('accompanist_id', sql.Int, person_id)
-        .query(`
-          SELECT full_name, phone, email, passport_photo_url, accompanist_type
-          FROM accompanists
-          WHERE accompanist_id = @accompanist_id
-        `);
-      personDetails = accompDetails.recordset[0];
-    }
+    // Convert event_type to role
+    const role = event_type === 'participating' ? 'participant' : 'accompanist';
 
     // Insert into event table
+    const insertQuery = person_type === 'student'
+      ? `INSERT INTO ${tableName} (
+          college_id, college_name, person_type, student_id, 
+          full_name, usn, role
+        ) VALUES (
+          @college_id, @college_name, @person_type, @person_id,
+          @full_name, @usn, @role
+        )`
+      : `INSERT INTO ${tableName} (
+          college_id, college_name, person_type, accompanist_id,
+          full_name, usn, role
+        ) VALUES (
+          @college_id, @college_name, @person_type, @person_id,
+          @full_name, NULL, @role
+        )`;
+
     await transaction
       .request()
-      .input('person_id', sql.Int, person_id)
-      .input('person_type', sql.VarChar(15), person_type)
-      .input('full_name', sql.VarChar(255), personDetails.full_name)
-      .input('phone', sql.VarChar(20), personDetails.phone)
-      .input('email', sql.VarChar(255), personDetails.email)
-      .input('photo_url', sql.VarChar(500), personDetails.passport_photo_url)
-      .input('accompanist_type', sql.VarChar(20), personDetails.accompanist_type || null)
       .input('college_id', sql.Int, auth.college_id)
-      .input('event_type', sql.VarChar(20), event_type)
-      .input('assigned_by_user_id', sql.Int, auth.user_id)
-      .query(`
-        INSERT INTO ${tableName} (
-          person_id, person_type, full_name, phone, email, photo_url,
-          accompanist_type, college_id, event_type, assigned_by_user_id
-        )
-        VALUES (
-          @person_id, @person_type, @full_name, @phone, @email, @photo_url,
-          @accompanist_type, @college_id, @event_type, @assigned_by_user_id
-        )
-      `);
+      .input('college_name', sql.VarChar(255), collegeName)
+      .input('person_type', sql.VarChar(20), person_type)
+      .input('person_id', sql.Int, person_id)
+      .input('full_name', sql.VarChar(255), personDetails.full_name)
+      .input('usn', sql.VarChar(50), personDetails.usn || null)
+      .input('role', sql.VarChar(20), role)
+      .query(insertQuery);
 
     await transaction.commit();
 
@@ -494,6 +517,7 @@ const removeEventAssignment = async (pool, auth, body) => {
   }
 
   const tableName = EVENT_TABLES[event_slug];
+  const idColumn = person_type === 'student' ? 'student_id' : 'accompanist_id';
 
   // Delete from event table
   const result = await pool
@@ -503,7 +527,7 @@ const removeEventAssignment = async (pool, auth, body) => {
     .input('college_id', sql.Int, auth.college_id)
     .query(`
       DELETE FROM ${tableName}
-      WHERE person_id = @person_id
+      WHERE ${idColumn} = @person_id
         AND person_type = @person_type
         AND college_id = @college_id
     `);
