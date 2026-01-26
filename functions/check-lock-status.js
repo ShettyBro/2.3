@@ -124,7 +124,7 @@ exports.handler = async (event) => {
       headers,
       body: JSON.stringify({
         success: true,
-        is_locked: data.is_final_approved === 1,
+        is_locked: !!data.is_final_approved,
         final_approved_at: data.final_approved_at,
         college_code: data.college_code,
         college_name: data.college_name,
