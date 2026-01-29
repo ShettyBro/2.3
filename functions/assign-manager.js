@@ -1,8 +1,23 @@
 const sql = require('mssql');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Resend } = require('resend');
+const nodemailer = require("nodemailer");
 require('dotenv').config();
+
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT),
+        secure: false,
+        requireTLS: true,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+
 
 const dbConfig = {
   user: process.env.DB_USER,
@@ -16,9 +31,7 @@ const dbConfig = {
 };
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-const resend = new Resend(RESEND_API_KEY);
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -175,8 +188,8 @@ exports.handler = async (event) => {
 
     // Send email with credentials
     try {
-      await resend.emails.send({
-        from: 'VTU Fest 2026 <noreply@vtufest2026.acharyahabba.com>',
+     await transporter.sendMail({
+        from: process.env.FROM_EMAIL,
         to: manager_email,
         subject: 'You have been assigned as Team Manager - VTU Fest 2026',
         html: `
